@@ -21,39 +21,12 @@ resource "aws_vpc" "default"{
      }
  }
  
-  resource "aws_subnet" "public-b"{
+ resource "aws_subnet" "public-b"{
      vpc_id = aws_vpc.default.id
      cidr_block = "10.0.2.0/24"
      
      tags = {
          Name = "public-b-tf"
-     }
- }
- 
-  resource "aws_subnet" "private-a"{
-     vpc_id = aws_vpc.default.id
-     cidr_block = "10.0.3.0/24"
-     
-     tags = {
-         Name = "private-a-tf"
-     }
- }
- 
-  resource "aws_subnet" "private-b"{
-     vpc_id = aws_vpc.default.id
-     cidr_block = "10.0.4.0/24"
-     
-     tags = {
-         Name = "private-b-tf"
-     }
- }
- 
- resource "aws_subnet" "public-c"{
-     vpc_id = aws_vpc.default.id
-     cidr_block = "10.0.5.0/24"
-     
-     tags = {
-         Name = "public-c-tf"
      }
  }
  
@@ -79,11 +52,6 @@ resource "aws_vpc" "default"{
  
  resource "aws_route_table_association" "a"{
   subnet_id = aws_subnet.public-a.id
-  route_table_id = aws_route_table.r.id
- }
- 
-  resource "aws_route_table_association" "b"{
-  subnet_id = aws_subnet.public-b.id
   route_table_id = aws_route_table.r.id
  }
  
@@ -141,8 +109,8 @@ resource "aws_security_group" "allow_http" {
 
 resource "aws_instance" "web" {
   ami = data.aws_ami.ubuntu.id
-  instance_type = var.instance_type
-  subnet_id = aws_subnet.public-b.id
+  instance_type = "t2.micro"
+  subnet_id = aws_subnet.public-a.id
   key_name = aws_key_pair.deployer.id
   associate_public_ip_address = true
   user_data = file("${path.module}/postinstall.sh")
@@ -151,6 +119,82 @@ resource "aws_instance" "web" {
   tags = {
     Name = "HelloWorld"
   }
+}
+
+#Create loadbalancer
+resource "aws_lb" "alb_terraform" {
+  name               = "alb_terraform"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = ["${aws_security_group.allow_http.id}"]
+  subnets            = ["${aws_subnet.public-a.id}"]
+
+#Create target group
+resource "aws_lb_target_group" "target_group_tf" {
+  name     = "target_group_tf"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.default.id
+}
+resource "aws_lb_target_group_attachment" "target_group_attachment_tf" {
+  target_group_arn = aws_lb_target_group.target_group_tf.arn
+  target_id        = aws_instance.target_group_tf.id
+  port             = 80
+  }
+}
+
+resource "aws_placement_group" "pl-gr" {
+  name     = "pl-gr"
+  strategy = "cluster"
+}
+
+resource "aws_autoscaling_group" "bar" {
+  name                      = "foobar3-terraform-test"
+  max_size                  = 3
+  min_size                  = 2
+  health_check_grace_period = 300
+  health_check_type         = "ELB"
+  desired_capacity          = 1
+  force_delete              = true
+  placement_group           = "${aws_placement_group.pl-gr.id}"
+  launch_configuration      = "${aws_launch_configuration.lc_terraform.name}"
+  vpc_zone_identifier       = ["${aws_subnet.public-a.id}", "${aws_subnet.public-b.id}"]
+
+  initial_lifecycle_hook {
+    name                 = "foobar"
+    default_result       = "CONTINUE"
+    heartbeat_timeout    = 2000
+    lifecycle_transition = "autoscaling:EC2_INSTANCE_LAUNCHING"
+
+    notification_metadata = <<EOF
+{
+  "foo": "bar"
+}
+EOF
+
+    notification_target_arn = "arn:aws:sqs:us-east-1:444455556666:queue1*"
+    role_arn                = "arn:aws:iam::123456789012:role/S3Access"
+  }
+}
+
+#Create lb listner
+resource "aws_lb_listener" "alb_listner_terraform" {
+  load_balancer_arn = aws_lb.alb_terraform.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lb_target_group_tf.arn
+  }
+}
+
+#Create LAUNCH CONFIGURATION
+resource "aws_launch_configuration" "lc_terraform" {
+  image_id = data.aws_ami.ubuntu.id
+  instance_type = "t2.micro"
+  security_groups = aws_security_group.allow_http.id
+  user_data = file("${post_install.sh}")
 }
 
  output "private-key"{
