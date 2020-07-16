@@ -48,6 +48,15 @@ resource "aws_vpc" "default"{
      }
  }
  
+ resource "aws_subnet" "public-c"{
+     vpc_id = aws_vpc.default.id
+     cidr_block = "10.0.5.0/24"
+     
+     tags = {
+         Name = "public-c-tf"
+     }
+ }
+ 
  resource "aws_internet_gateway" "gw"{
      vpc_id = aws_vpc.default.id
      
