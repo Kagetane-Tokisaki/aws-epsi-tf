@@ -121,7 +121,6 @@ resource "aws_instance" "web" {
   }
 }
 
-#Create loadbalancer
 resource "aws_lb" "alb_terraform" {
   name               = "alb_terraform"
   internal           = false
@@ -129,7 +128,6 @@ resource "aws_lb" "alb_terraform" {
   security_groups    = ["${aws_security_group.allow_http.id}"]
   subnets            = ["${aws_subnet.public-a.id}"]
 
-#Create target group
 resource "aws_lb_target_group" "target_group_tf" {
   name     = "target_group_tf"
   port     = 80
@@ -177,7 +175,6 @@ EOF
   }
 }
 
-#Create lb listner
 resource "aws_lb_listener" "alb_listner_terraform" {
   load_balancer_arn = aws_lb.alb_terraform.arn
   port              = "80"
@@ -189,7 +186,6 @@ resource "aws_lb_listener" "alb_listner_terraform" {
   }
 }
 
-#Create LAUNCH CONFIGURATION
 resource "aws_launch_configuration" "lc_terraform" {
   image_id = data.aws_ami.ubuntu.id
   instance_type = "t2.micro"
